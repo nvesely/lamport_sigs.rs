@@ -1,4 +1,3 @@
-
 use ring::digest::{Algorithm, SHA256, SHA512};
 
 use PrivateKey;
@@ -102,8 +101,5 @@ fn test_serialization_panic() {
     let pub_key = PrivateKey::new(digest_512).public_key();
     let mut bytes = pub_key.to_bytes();
     bytes.pop();
-    let recovered_pub_key = PublicKey::from_vec(bytes, digest_512).unwrap();
-
-    assert_eq!(pub_key.one_values, recovered_pub_key.one_values);
-    assert_eq!(pub_key.zero_values, recovered_pub_key.zero_values);
+    let _recovered_pub_key = PublicKey::from_vec(bytes, digest_512).unwrap();
 }

@@ -84,44 +84,32 @@ impl From<PublicKey> for Vec<u8> {
 
 impl PublicKey {
     /// Intializes a public key with a byte vector.
-    /// Returns `None` if it couldn't parse the provided data
+    /// Returns `None` if it couldn't parse the provided data.
     pub fn from_vec(vec: Vec<u8>, algorithm: &'static Algorithm) -> Option<PublicKey> {
         let size = vec.len();
         let hash_output_size = algorithm.output_len;
         if size != (hash_output_size * hash_output_size * 8 * 2) {
             return None;
-        }
-
-        let mut zero_values_merged = vec;
-        let one_values_merged = zero_values_merged.split_off(size / 2);
-
-        let mut zero_values = Vec::new();
-        for i in (0..zero_values_merged.len()).filter(|x| x % hash_output_size == 0) {
-            // indexes for heads
-            let mut sub_vec = Vec::new();
-            for j in 0..hash_output_size {
-                sub_vec.push(zero_values_merged[i + j]);
+        } else {
+            let hsize = size / 2;
+            let zeros_len = hsize / hash_output_size;
+            let mut zero_values = Vec::with_capacity(zeros_len);
+            let mut one_values = Vec::with_capacity(zeros_len);
+            // TODO: switch from `filter` to `step_by` when stable.
+            for (i, j) in (0..(hsize))
+                .filter(|x| x % hash_output_size == 0)
+                .zip((hash_output_size..(hsize + 1)).filter(|x| x % hash_output_size == 0))
+            {
+                zero_values.push(vec[i..j].to_vec());
+                one_values.push(vec[(hsize + i)..(hsize + j)].to_vec());
             }
 
-            zero_values.push(sub_vec);
+            Some(PublicKey {
+                zero_values,
+                one_values,
+                algorithm,
+            })
         }
-
-        let mut one_values = Vec::new();
-        for i in (0..one_values_merged.len()).filter(|x| x % hash_output_size == 0) {
-            // indexes for heads
-            let mut sub_vec = Vec::new();
-            for j in 0..hash_output_size {
-                sub_vec.push(one_values_merged[i + j]);
-            }
-
-            one_values.push(sub_vec);
-        }
-
-        Some(PublicKey {
-            zero_values: zero_values,
-            one_values: one_values,
-            algorithm: algorithm,
-        })
     }
 
     /// Serializes a public key into a byte vector
@@ -140,7 +128,7 @@ impl PublicKey {
         if signature.len() != self.algorithm.output_len * 8 {
             return false;
         }
-        
+
         let mut context = Context::new(self.algorithm);
         context.update(data);
         let result = context.finish();
