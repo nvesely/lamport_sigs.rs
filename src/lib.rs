@@ -190,12 +190,12 @@ impl PrivateKey {
             buffer
         };
 
-        let hashed_zero_values = hash_values(&self.zero_values);
-        let hashed_one_values = hash_values(&self.one_values);
+        let zero_values = hash_values(&self.zero_values);
+        let one_values = hash_values(&self.one_values);
 
         PublicKey {
-            zero_values: hashed_zero_values,
-            one_values: hashed_one_values,
+            zero_values,
+            one_values,
             algorithm: self.algorithm,
         }
     }
@@ -203,6 +203,7 @@ impl PrivateKey {
     /// Signs the data with the private key and returns the result if successful.
     /// If unsuccesful, an explanation string is returned
     pub fn sign(&mut self, data: &[u8]) -> Result<LamportSignatureData, &'static str> {
+        // TODO: make constant-time.
         if self.used {
             return Err("Attempting to sign more than once.");
         }
@@ -232,6 +233,7 @@ impl PrivateKey {
 
 impl Drop for PrivateKey {
     fn drop(&mut self) {
+        // TODO: random data may be better here.
         let zeroize_vector = |vector: &mut Vec<Vec<u8>>| {
             for v2 in vector.iter_mut() {
                 for byte in v2.iter_mut() {
