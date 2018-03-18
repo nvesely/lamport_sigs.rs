@@ -12,7 +12,7 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
 use rand::{OsRng, Rng};
-use ring::digest::{Algorithm, Context};
+use ring::digest::{Algorithm, digest};
 use subtle::{byte_is_nonzero, slices_equal};
 
 /// A type alias defining a Lamport signature
@@ -124,24 +124,18 @@ impl PublicKey {
         if signature.len() != self.algorithm.output_len * 8 {
             return false;
         }
-
-        let mut context = Context::new(self.algorithm);
-        context.update(data);
-        let result = context.finish();
-        let data_hash = result.as_ref();
+        let hash = digest(&self.algorithm, data);
 
         let mut x = 1;
-        for (i, byte) in data_hash.iter().enumerate() {
+        for (i, byte) in hash.as_ref().iter().enumerate() {
             for j in 0..8 {
                 let offset = i * 8 + j;
-                let mut context = Context::new(self.algorithm);
-                context.update(signature[offset].as_slice());
-                let hashed_value = Vec::from(context.finish().as_ref());
+                let hashed_value = digest(&self.algorithm, &signature[offset][..]);
 
                 if byte_is_nonzero(byte & (1 << j)) == 1 {
-                    x &= slices_equal(&hashed_value[..], &self.one_values[offset][..]);
+                    x &= slices_equal(&hashed_value.as_ref(), &self.one_values[offset][..]);
                 } else {
-                    x &= slices_equal(&hashed_value[..], &self.zero_values[offset][..]);
+                    x &= slices_equal(&hashed_value.as_ref(), &self.zero_values[offset][..]);
                 }
             }
         }
@@ -186,9 +180,9 @@ impl PrivateKey {
             let mut buffer = vec![buffer_byte; self.algorithm.output_len * 8];
 
             for i in 0..self.algorithm.output_len * 8 {
-                let mut context = Context::new(self.algorithm);
-                context.update(x[i].as_slice());
-                buffer[i] = Vec::from(context.finish().as_ref());
+
+                let hash = digest(&self.algorithm, &x[i][..]);
+                buffer[i] = Vec::from(hash.as_ref());
             }
 
             buffer
@@ -211,10 +205,8 @@ impl PrivateKey {
             return Err("Attempting to sign more than once.");
         }
 
-        let mut context = Context::new(self.algorithm);
-        context.update(data);
-        let result = context.finish();
-        let data_hash = result.as_ref();
+        let hash = digest(&self.algorithm, data);
+        let data_hash = hash.as_ref();
 
         let signature_len = data_hash.len() * 8;
         let mut signature = Vec::with_capacity(signature_len);
