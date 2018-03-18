@@ -1,4 +1,5 @@
 use ring::digest::{Algorithm, SHA256, SHA512};
+use test::Bencher;
 
 use PrivateKey;
 use PublicKey;
@@ -102,4 +103,10 @@ fn test_serialization_panic() {
     let mut bytes = pub_key.to_bytes();
     bytes.pop();
     let _recovered_pub_key = PublicKey::from_vec(bytes, digest_512).unwrap();
+}
+
+#[bench]
+fn bench_to_bytes(b: &mut Bencher) {
+    let pub_key = PrivateKey::new(digest_512).public_key();
+    b.iter(|| pub_key.to_bytes());
 }

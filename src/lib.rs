@@ -1,12 +1,12 @@
 //! *lamport* implements one-time hash-based signatures using the Lamport signature scheme.
-
+#![feature(test)]
 #![deny(missing_docs, missing_debug_implementations, missing_copy_implementations, trivial_casts,
-        trivial_numeric_casts, unsafe_code, unstable_features, unused_import_braces,
-        unused_qualifications)]
+        trivial_numeric_casts, unsafe_code, unused_import_braces, unused_qualifications)]
 
 extern crate rand;
 extern crate ring;
 extern crate subtle;
+extern crate test;
 
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
@@ -109,10 +109,11 @@ impl PublicKey {
 
     /// Serializes a public key into a byte vector
     pub fn to_bytes(&self) -> Vec<u8> {
+        let len = 2 * self.zero_values.len() * self.algorithm.output_len;
         self.zero_values.iter().chain(self.one_values.iter()).fold(
-            Vec::new(),
+            Vec::with_capacity(len),
             |mut acc, i| {
-                acc.append(&mut i.clone());
+                acc.extend_from_slice(i);
                 acc
             },
         )
