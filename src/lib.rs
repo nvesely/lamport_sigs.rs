@@ -1,20 +1,16 @@
 //! *lamport* implements one-time hash-based signatures using the Lamport signature scheme.
 
-#![deny(
-    missing_docs,
-    missing_debug_implementations, missing_copy_implementations,
-    trivial_casts, trivial_numeric_casts,
-    unsafe_code, unstable_features,
-    unused_import_braces, unused_qualifications
-)]
+#![deny(missing_docs, missing_debug_implementations, missing_copy_implementations, trivial_casts,
+        trivial_numeric_casts, unsafe_code, unstable_features, unused_import_braces,
+        unused_qualifications)]
 
 extern crate ring;
 extern crate rand;
 
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use rand::OsRng;
-use rand::Rng;
+
+use rand::{OsRng, Rng};
 use ring::digest::{Algorithm, Context};
 
 /// A type alias defining a Lamport signature
@@ -31,8 +27,8 @@ pub struct PublicKey {
 impl PartialEq for PublicKey {
     #[allow(trivial_casts)]
     fn eq(&self, other: &Self) -> bool {
-        self.algorithm as *const Algorithm == other.algorithm as *const Algorithm &&
-            self.zero_values == other.zero_values && self.one_values == other.one_values
+        self.algorithm as *const Algorithm == other.algorithm as *const Algorithm
+            && self.zero_values == other.zero_values && self.one_values == other.one_values
     }
 }
 
@@ -50,10 +46,7 @@ impl Ord for PublicKey {
         self.zero_values
             .cmp(&other.zero_values)
             .then(self.one_values.cmp(&other.one_values))
-            .then((self.algorithm as *const Algorithm).cmp(
-                &(other.algorithm as
-                      *const Algorithm),
-            ))
+            .then((self.algorithm as *const Algorithm).cmp(&(other.algorithm as *const Algorithm)))
     }
 }
 
@@ -249,9 +242,11 @@ impl PrivateKey {
 
 impl Drop for PrivateKey {
     fn drop(&mut self) {
-        let zeroize_vector = |vector: &mut Vec<Vec<u8>>| for v2 in vector.iter_mut() {
-            for byte in v2.iter_mut() {
-                *byte = 0;
+        let zeroize_vector = |vector: &mut Vec<Vec<u8>>| {
+            for v2 in vector.iter_mut() {
+                for byte in v2.iter_mut() {
+                    *byte = 0;
+                }
             }
         };
 
@@ -271,8 +266,8 @@ impl PartialEq for PrivateKey {
         }
 
         for i in 0..self.zero_values.len() {
-            if self.zero_values[i] != other.zero_values[i] ||
-                self.one_values[i] != other.one_values[i]
+            if self.zero_values[i] != other.zero_values[i]
+                || self.one_values[i] != other.one_values[i]
             {
                 return false;
             }
@@ -292,11 +287,9 @@ impl PartialOrd for PrivateKey {
 impl Ord for PrivateKey {
     // ⚠️ This is not a constant-time implementation
     fn cmp(&self, other: &PrivateKey) -> Ordering {
-        self.one_values.cmp(&other.one_values).then(
-            self.zero_values.cmp(
-                &other.zero_values,
-            ),
-        )
+        self.one_values
+            .cmp(&other.one_values)
+            .then(self.zero_values.cmp(&other.zero_values))
     }
 }
 
