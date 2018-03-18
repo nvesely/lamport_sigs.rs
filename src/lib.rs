@@ -4,14 +4,16 @@
         trivial_numeric_casts, unsafe_code, unstable_features, unused_import_braces,
         unused_qualifications)]
 
-extern crate ring;
 extern crate rand;
+extern crate ring;
+extern crate subtle;
 
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
 use rand::{OsRng, Rng};
 use ring::digest::{Algorithm, Context};
+use subtle::{byte_is_nonzero, slices_equal};
 
 /// A type alias defining a Lamport signature
 pub type LamportSignatureData = Vec<Vec<u8>>;
@@ -127,30 +129,23 @@ impl PublicKey {
         let result = context.finish();
         let data_hash = result.as_ref();
 
+        let mut x = 1;
         for (i, byte) in data_hash.iter().enumerate() {
             for j in 0..8 {
                 let offset = i * 8 + j;
-                if (byte & (1 << j)) > 0 {
-                    let mut context = Context::new(self.algorithm);
-                    context.update(signature[offset].as_slice());
-                    let hashed_value = Vec::from(context.finish().as_ref());
+                let mut context = Context::new(self.algorithm);
+                context.update(signature[offset].as_slice());
+                let hashed_value = Vec::from(context.finish().as_ref());
 
-                    if hashed_value != self.one_values[offset] {
-                        return false;
-                    }
+                if byte_is_nonzero(byte & (1 << j)) == 1 {
+                    x &= slices_equal(&hashed_value[..], &self.one_values[offset][..]);
                 } else {
-                    let mut context = Context::new(self.algorithm);
-                    context.update(signature[offset].as_slice());
-                    let hashed_value = Vec::from(context.finish().as_ref());
-
-                    if hashed_value != self.zero_values[offset] {
-                        return false;
-                    }
+                    x &= slices_equal(&hashed_value[..], &self.zero_values[offset][..]);
                 }
             }
         }
 
-        true
+        x == 1
     }
 }
 
