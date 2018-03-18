@@ -12,7 +12,7 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
 use rand::{OsRng, Rng};
-use ring::digest::{Algorithm, digest};
+use ring::digest::{digest, Algorithm};
 use subtle::{byte_is_nonzero, slices_equal};
 
 /// A type alias defining a Lamport signature
@@ -85,31 +85,32 @@ impl PublicKey {
         let hash_output_size = algorithm.output_len;
         if size != (hash_output_size * hash_output_size * 8 * 2) {
             return None;
-        } else {
-            let hsize = size / 2;
-            let zeros_len = hsize / hash_output_size;
-            let mut zero_values = Vec::with_capacity(zeros_len);
-            let mut one_values = Vec::with_capacity(zeros_len);
-            // TODO: switch from `filter` to `step_by` when stable.
-            for (i, j) in (0..(hsize))
-                .filter(|x| x % hash_output_size == 0)
-                .zip((hash_output_size..(hsize + 1)).filter(|x| x % hash_output_size == 0))
-            {
-                zero_values.push(vec[i..j].to_vec());
-                one_values.push(vec[(hsize + i)..(hsize + j)].to_vec());
-            }
-
-            Some(PublicKey {
-                zero_values,
-                one_values,
-                algorithm,
-            })
         }
+
+        let hsize = size / 2;
+        let zeros_len = hsize / hash_output_size;
+        let mut zero_values = Vec::with_capacity(zeros_len);
+        let mut one_values = Vec::with_capacity(zeros_len);
+        // TODO: switch from `filter` to `step_by` when stable.
+        for (i, j) in (0..(hsize))
+            .filter(|x| x % hash_output_size == 0)
+            .zip((hash_output_size..(hsize + 1)).filter(|x| x % hash_output_size == 0))
+        {
+            zero_values.push(vec[i..j].to_vec());
+            one_values.push(vec[(hsize + i)..(hsize + j)].to_vec());
+        }
+
+        Some(PublicKey {
+            zero_values,
+            one_values,
+            algorithm,
+        })
     }
 
     /// Serializes a public key into a byte vector
     pub fn to_bytes(&self) -> Vec<u8> {
-        let len = 2 * self.zero_values.len() * self.algorithm.output_len;
+        // num fields * length fields * length secret
+        let len = 2 * (8 * self.algorithm.output_len) * self.algorithm.output_len;
         self.zero_values.iter().chain(self.one_values.iter()).fold(
             Vec::with_capacity(len),
             |mut acc, i| {
@@ -147,28 +148,30 @@ impl PublicKey {
 impl PrivateKey {
     /// Generates a new random one-time signing key. This method can panic if OS RNG fails
     pub fn new(algorithm: &'static Algorithm) -> PrivateKey {
-        let generate_bit_hash_values = || -> Vec<Vec<u8>> {
-            let mut rng = match OsRng::new() {
-                Ok(g) => g,
-                Err(e) => panic!("Failed to obtain OS RNG: {}", e),
-            };
+        let mut rng = match OsRng::new() {
+            Ok(g) => g,
+            Err(e) => panic!("Failed to obtain OS RNG: {}", e),
+        };
+        let generate_bit_hash_values = |rng: &mut OsRng| -> Vec<Vec<u8>> {
             let buffer_byte = vec![0u8; algorithm.output_len];
             let mut buffer = vec![buffer_byte; algorithm.output_len * 8];
 
             for hash in &mut buffer {
+                // TODO: Upgrade to `try_fill_bytes` when that hits
+                // stable in `rand` (probably 0.5).
                 rng.fill_bytes(hash)
             }
 
             buffer
         };
 
-        let zero_values = generate_bit_hash_values();
-        let one_values = generate_bit_hash_values();
+        let zero_values = generate_bit_hash_values(&mut rng);
+        let one_values = generate_bit_hash_values(&mut rng);
 
         PrivateKey {
-            zero_values: zero_values,
-            one_values: one_values,
-            algorithm: algorithm,
+            zero_values,
+            one_values,
+            algorithm,
             used: false,
         }
     }
@@ -180,7 +183,6 @@ impl PrivateKey {
             let mut buffer = vec![buffer_byte; self.algorithm.output_len * 8];
 
             for i in 0..self.algorithm.output_len * 8 {
-
                 let hash = digest(&self.algorithm, &x[i][..]);
                 buffer[i] = Vec::from(hash.as_ref());
             }
@@ -244,23 +246,26 @@ impl Drop for PrivateKey {
 }
 
 impl PartialEq for PrivateKey {
-    // ⚠️ This is not a constant-time implementation
     fn eq(&self, other: &PrivateKey) -> bool {
-        if self.one_values.len() != other.one_values.len() {
+        if self.algorithm != other.algorithm {
             return false;
         }
-        if self.zero_values.len() != other.zero_values.len() {
+        // NOTE: The `zero_values` and `one_values` need not be of the
+        // the same length (and maybe this should change).
+        let zero_size = self.zero_values.len();
+        let one_size = self.one_values.len();
+        if zero_size != other.zero_values.len() || one_size != other.one_values.len() {
             return false;
         }
 
-        for i in 0..self.zero_values.len() {
-            if self.zero_values[i] != other.zero_values[i]
-                || self.one_values[i] != other.one_values[i]
-            {
-                return false;
-            }
+        let mut x = 1;
+        for i in 0..zero_size {
+            x &= slices_equal(&self.zero_values[i][..], &other.zero_values[i][..]);
         }
-        true
+        for i in 0..one_size {
+            x &= slices_equal(&self.one_values[i][..], &other.one_values[i][..]);
+        }
+        x == 1
     }
 }
 
